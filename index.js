@@ -41,7 +41,7 @@ function getCppFiles() {
 
 // Command: procpp init
 function initProject() {
-    console.log("🚀 Initializing PRO C++ Project...");
+    console.log("🚀 Initializing PRO C++ Project with C++20....");
     
     const vscodeDir = path.join(process.cwd(), '.vscode');
     if (!fs.existsSync(vscodeDir)) {
@@ -56,7 +56,7 @@ function initProject() {
         console.log("✅ Created main.cpp");
     }
 
-    // Generate tasks.json for bulletproof debugging
+    // Generate tasks.json with C++20
     const tasksContent = {
         "version": "2.0.0",
         "tasks": [
@@ -65,7 +65,7 @@ function initProject() {
                 "label": "DEBUG-BUILD-MSVC",
                 "command": "cl.exe",
                 "args": [
-                    "/Zi", "/EHsc", "/nologo",
+                    "/std:c++20", "/Zi", "/EHsc", "/nologo",
                     "/Fe${fileDirname}\\debug_build_999.exe",
                     "${file}"
                 ],
@@ -97,7 +97,7 @@ function initProject() {
     };
     fs.writeFileSync(path.join(vscodeDir, 'launch.json'), JSON.stringify(launchContent, null, 4));
 
-    console.log("✅ Created .vscode debugger configs (F5 ready!)");
+    console.log("✅ Created .vscode debugger configs (C++20 & F5 ready!)");
     console.log("🎯 Project initialized! Run 'procpp watch' to start developing.");
 }
 
@@ -123,8 +123,8 @@ function buildAndRun(isWatchMode = false) {
     const timestamp = Date.now();
     const outputExe = `app_build_${timestamp}.exe`;
     
-    console.log(`\n🔨 Compiling...`);
-    const compileCmd = `cl.exe /nologo /EHsc ${cppFiles} /Fe"${outputExe}"`;
+    console.log(`\n🔨 Compiling (Standard: C++20)...`);
+    const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExe}"`;
     
     const success = runSyncCommand(compileCmd);
 
@@ -146,7 +146,7 @@ function buildAndRun(isWatchMode = false) {
 
 // Command: procpp watch
 function watchProject() {
-    console.log("👀 PRO C++ Watcher Started!");
+    console.log("👀 PRO C++ Watcher Started (C++20 Mode)");
     console.log("Press Ctrl+C to stop. Watching for file changes...");
     
     // Initial build
