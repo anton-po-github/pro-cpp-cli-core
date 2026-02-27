@@ -1,6 +1,14 @@
 {
   "name": "pro-cpp-cli-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anton-po-github/pro-cpp-cli-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anton-po-github/pro-cpp-cli-core/issues"
+  },
+  "homepage": "https://github.com/anton-po-github/pro-cpp-cli-core#readme",
   "description": "The ultimate C++ Developer Experience for Windows",
   "main": "index.js",
   "bin": {
