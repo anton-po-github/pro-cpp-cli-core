@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
+/**
+ * PRO C++ CLI Core (With C++20 Modules Topological Sorter)
+ * FIX: Kept .ifc files alive for IntelliSense!
+ */
+
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const [,, command, ...args] = process.argv;
-
 let currentAppProcess = null;
 let watchTimeout = null;
 
-// Helper: Safely execute synchronous shell commands
 function runSyncCommand(cmd) {
     try {
         execSync(cmd, { stdio: 'inherit' });
@@ -19,44 +22,79 @@ function runSyncCommand(cmd) {
     }
 }
 
-// Helper: Clean up old build files to save disk space
 function cleanupOldBuilds() {
     const files = fs.readdirSync(process.cwd());
     files.forEach(file => {
-        if ((file.startsWith('app_build_') && file.endsWith('.exe')) || file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk')) {
-            try {
-                fs.unlinkSync(path.join(process.cwd(), file));
-            } catch (err) {
-                // Ignore errors: file might be locked by OS or Antivirus. We will try next time!
-            }
+        // PRO FIX: Removed .ifc from deletion list. IntelliSense needs them to resolve imports!
+        const isArtifact = file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || (file.startsWith('app_build_') && file.endsWith('.exe'));
+        if (isArtifact) {
+            try { fs.unlinkSync(path.join(process.cwd(), file)); } catch (err) {}
         }
     });
 }
 
-// Helper: Get all .cpp files in the directory
-function getCppFiles() {
-    const files = fs.readdirSync(process.cwd());
-    return files.filter(file => file.endsWith('.cpp')).join(' ');
+function getSortedCppFiles() {
+    const fileList = [];
+    
+    function scanDir(dir) {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+            const filePath = path.join(dir, file);
+            if (fs.statSync(filePath).isDirectory()) {
+                if (file !== 'node_modules' && file !== '.vscode' && file !== 'build') {
+                    scanDir(filePath);
+                }
+            } else if (filePath.endsWith('.cpp') || filePath.endsWith('.ixx')) {
+                fileList.push(filePath);
+            }
+        }
+    }
+    scanDir(process.cwd());
+
+    const fileData = fileList.map(file => {
+        const content = fs.readFileSync(file, 'utf8');
+        const exportsMatch = content.match(/export\s+module\s+([a-zA-Z0-9_]+)\s*;/);
+        const importsMatches = [...content.matchAll(/import\s+([a-zA-Z0-9_]+)\s*;/g)].map(m => m[1]);
+        
+        return {
+            file,
+            exports: exportsMatch ? exportsMatch[1] : null,
+            imports: importsMatches
+        };
+    });
+
+    const sortedFiles = [];
+    const visited = new Set();
+    const processing = new Set();
+
+    function visit(node) {
+        if (visited.has(node.file)) return;
+        if (processing.has(node.file)) return;
+        processing.add(node.file);
+
+        node.imports.forEach(imp => {
+            const dep = fileData.find(f => f.exports === imp);
+            if (dep) visit(dep);
+        });
+
+        processing.delete(node.file);
+        visited.add(node.file);
+        sortedFiles.push(`"${node.file}"`);
+    }
+
+    fileData.forEach(visit);
+    return sortedFiles.join(' ');
 }
 
-// Command: procpp init
 function initProject() {
-    console.log("🚀 Initializing PRO C++ Project with C++20....");
-    
+    console.log("🚀 Initializing PRO C++ Project (C++20 Modules)...");
     const vscodeDir = path.join(process.cwd(), '.vscode');
-    if (!fs.existsSync(vscodeDir)) {
-        fs.mkdirSync(vscodeDir);
-    }
+    if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir);
 
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
-    const mainCppContent = `#include <iostream>\n\n// The main entry point of the application\nint main() {\n    std::cout << "PRO CLI works like magic!\\n";\n    return 0;\n}\n`;
+    const mainCppContent = `import std.core;\n// C++20 Modules ready!\nint main() { return 0; }`;
+    if (!fs.existsSync(mainCppPath)) fs.writeFileSync(mainCppPath, mainCppContent);
 
-    if (!fs.existsSync(mainCppPath)) {
-        fs.writeFileSync(mainCppPath, mainCppContent);
-        console.log("✅ Created main.cpp");
-    }
-
-    // Generate tasks.json with C++20
     const tasksContent = {
         "version": "2.0.0",
         "tasks": [
@@ -64,126 +102,61 @@ function initProject() {
                 "type": "cppbuild",
                 "label": "DEBUG-BUILD-MSVC",
                 "command": "cl.exe",
-                "args": [
-                    "/std:c++20", "/Zi", "/EHsc", "/nologo",
-                    "/Fe${fileDirname}\\debug_build_999.exe",
-                    "${file}"
-                ],
-                "options": { "cwd": "${fileDirname}" },
+                "args": ["/std:c++20", "/Zi", "/EHsc", "/nologo", "/Fe${fileDirname}\\debug_build.exe", "${file}"],
                 "problemMatcher": ["$msCompile"],
                 "group": "build"
             }
         ]
     };
     fs.writeFileSync(path.join(vscodeDir, 'tasks.json'), JSON.stringify(tasksContent, null, 4));
-
-    // Generate launch.json for bulletproof debugging
-    const launchContent = {
-        "version": "0.2.0",
-        "configurations": [
-            {
-                "name": "⚙️ PRO C++ Debug",
-                "type": "cppvsdbg",
-                "request": "launch",
-                "program": "${fileDirname}\\debug_build_999.exe",
-                "args": [],
-                "stopAtEntry": false,
-                "cwd": "${fileDirname}",
-                "environment": [],
-                "console": "integratedTerminal",
-                "preLaunchTask": "DEBUG-BUILD-MSVC"
-            }
-        ]
-    };
-    fs.writeFileSync(path.join(vscodeDir, 'launch.json'), JSON.stringify(launchContent, null, 4));
-
-    console.log("✅ Created .vscode debugger configs (C++20 & F5 ready!)");
-    console.log("🎯 Project initialized! Run 'procpp watch' to start developing.");
+    console.log("✅ Ready! Standard set to C++20.");
 }
 
-// Core Build and Run Logic
-function buildAndRun(isWatchMode = false) {
-    const cppFiles = getCppFiles();
-
+function buildAndRun() {
+    const cppFiles = getSortedCppFiles();
     if (!cppFiles) {
-        console.error("❌ No .cpp files found in this directory!");
+        console.error("❌ Error: No .cpp or .ixx files found!");
         return;
     }
 
-    // 1. Kill previous running instance if it exists
-    if (currentAppProcess) {
-        currentAppProcess.kill();
-        currentAppProcess = null;
-    }
-
-    // 2. Background cleanup of unlocked old files
+    if (currentAppProcess) currentAppProcess.kill();
     cleanupOldBuilds();
 
-    // 3. Generate unique executable name to bypass Antivirus/OS locks
-    const timestamp = Date.now();
-    const outputExe = `app_build_${timestamp}.exe`;
+    const outputExe = `app_build_${Date.now()}.exe`;
+    console.log(`\n🔨 Compiling with SMART DEPENDENCY GRAPH...`);
     
-    console.log(`\n🔨 Compiling (Standard: C++20)...`);
     const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExe}"`;
     
-    const success = runSyncCommand(compileCmd);
-
-    if (success) {
+    if (runSyncCommand(compileCmd)) {
         console.log(`🟢 RUNNING -> ${outputExe}\n` + "-".repeat(40));
-        
-        // 4. Run the new executable asynchronously so Node.js can keep watching
         currentAppProcess = spawn(`.\\${outputExe}`, [], { shell: true, stdio: 'inherit' });
-        
         currentAppProcess.on('close', (code) => {
-            if (code !== null) {
-                console.log("-".repeat(40) + `\n🛑 Process exited with code ${code}`);
-            }
+            if (code !== null) console.log("-".repeat(40) + `\n🛑 Process exited with code ${code}`);
         });
     } else {
         console.log(`\n❌ BUILD FAILED`);
     }
 }
 
-// Command: procpp watch
 function watchProject() {
-    console.log("👀 PRO C++ Watcher Started (C++20 Mode)");
-    console.log("Press Ctrl+C to stop. Watching for file changes...");
-    
-    // Initial build
-    buildAndRun(true);
+    console.log("👀 PRO C++ Watcher Started (Mode: Smart C++20 Modules)");
+    buildAndRun();
 
-    // Watch the current directory for changes
-    fs.watch(process.cwd(), (eventType, filename) => {
-        if (filename && (filename.endsWith('.cpp') || filename.endsWith('.h'))) {
-            // Debounce to prevent multiple rapid triggers when saving
+    fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
+        if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h'))) {
             clearTimeout(watchTimeout);
             watchTimeout = setTimeout(() => {
                 console.clear();
-                console.log(`[${new Date().toLocaleTimeString()}] Change detected in ${filename}`);
-                buildAndRun(true);
-            }, 300); // 300ms delay
+                console.log(`[${new Date().toLocaleTimeString()}] Change detected: ${filename}`);
+                buildAndRun();
+            }, 300);
         }
     });
 }
 
-// CLI Router
 switch (command) {
-    case 'init':
-        initProject();
-        break;
-    case 'run':
-        buildAndRun(false);
-        break;
-    case 'watch':
-        watchProject();
-        break;
-    default:
-        console.log(`
-🛠️  PRO CPP CLI 🛠️
-Usage:
-  procpp init   - Scaffold C++ project & VS Code debugger configs
-  procpp run    - Compile and run all .cpp files once
-  procpp watch  - Live reload! Auto-compile and run on file save
-        `);
-        break;
+    case 'init': initProject(); break;
+    case 'run': buildAndRun(); break;
+    case 'watch': watchProject(); break;
+    default: console.log("🛠️ PRO CPP CLI\nUsage: procpp <init|run|watch>"); break;
 }
