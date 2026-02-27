@@ -1,0 +1,21 @@
+{
+  "name": "pro-cpp-cli-core",
+  "version": "1.0.0",
+  "description": "The ultimate C++ Developer Experience for Windows",
+  "main": "index.js",
+  "bin": {
+    "procpp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "cpp",
+    "c++",
+    "cli",
+    "watch",
+    "build"
+  ],
+  "author": "PRO Developer",
+  "license": "MIT"
+}
