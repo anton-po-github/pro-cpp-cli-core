@@ -21,12 +21,12 @@ npm install -g pro-cpp-cli-core
  1. Create a new folder and open it in VS Code.
 
  2. Initialize the project:
- ```cmd
-    procpp init
+```cmd
+procpp init
 ```
  3. Start the magic watcher:
-  ```cmd
-    procpp watch
+```cmd
+procpp watch
 ```
 ⚠️ Important: Terminal Setup
 To use `procpp` inside VS Code terminal, you MUST use the Developer Environment:
@@ -41,6 +41,7 @@ To use `procpp` inside VS Code terminal, you MUST use the Developer Environment:
 
 Now `cl.exe` is recognized, and `procpp` can build your code!
 
+
 ✨ Features
 
  • `procpp init`: Creates `main.cpp` and perfect `.vscode` configs for a "one-click" debugging experience (F5). 
@@ -48,6 +49,7 @@ Now `cl.exe` is recognized, and `procpp` can build your code!
  • `procpp run`: Compiles all `.cpp` files in the directory and runs them.
 
  • `procpp watch`: Professional-grade hot-reload. It bypasses Antivirus locks by using unique executable naming and handles process recycling automatically.
+
 
 🐞 Debugging
 
