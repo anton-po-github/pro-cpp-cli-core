@@ -14,6 +14,7 @@ This tool is designed for **Windows** and requires **Visual Studio 2022** (Commu
 
 ```cmd
 npm install -g pro-cpp-cli-core
+```
 
 🚀 Quick Start
 
