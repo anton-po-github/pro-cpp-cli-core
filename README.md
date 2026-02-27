@@ -28,6 +28,9 @@ procpp init
 ```cmd
 procpp watch
 ```
+
+---
+
 ⚠️ Important: Terminal Setup
 To use `procpp` inside VS Code terminal, you MUST use the Developer Environment:
 
@@ -41,6 +44,7 @@ To use `procpp` inside VS Code terminal, you MUST use the Developer Environment:
 
 Now `cl.exe` is recognized, and `procpp` can build your code!
 
+---
 
 ✨ Features
 
@@ -50,6 +54,7 @@ Now `cl.exe` is recognized, and `procpp` can build your code!
 
  • `procpp watch`: Professional-grade hot-reload. It bypasses Antivirus locks by using unique executable naming and handles process recycling automatically.
 
+---
 
 🐞 Debugging
 
