@@ -4,17 +4,31 @@
  * PRO C++ CLI Core (With C++20 Modules Topological Sorter)
  * FIX: Restored initProject!
  * FIX: Smart post-build artifact routing to .build/ directory!
+ * NEW: Build time measurement using performance.now()
+ * NEW: Native ANSI terminal colors for PRO Developer Experience
  */
 
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { performance } = require('perf_hooks');
 
 const [,, command, ...args] = process.argv;
 let currentAppProcess = null;
 let watchTimeout = null;
 
 const BUILD_DIR = path.join(process.cwd(), '.build');
+
+// ANSI Color codes for a beautiful console UI (Zero dependencies!)
+const colors = {
+    reset: "\x1b[0m",
+    cyan: "\x1b[36m",
+    green: "\x1b[32m",
+    yellow: "\x1b[33m",
+    red: "\x1b[31m",
+    gray: "\x1b[90m",
+    bold: "\x1b[1m"
+};
 
 function runSyncCommand(cmd) {
     try {
@@ -52,7 +66,7 @@ function getSortedCppFiles() {
         for (const file of files) {
             const filePath = path.join(dir, file);
             if (fs.statSync(filePath).isDirectory()) {
-                // ИГНОРИРУЕМ ПАПКУ .build, ЧТОБЫ ВОЧЕР НЕ СОШЕЛ С УМА
+                // Ignore .build directory so watcher doesn't loop
                 if (file !== 'node_modules' && file !== '.vscode' && file !== '.build') {
                     scanDir(filePath);
                 }
@@ -95,7 +109,7 @@ function getSortedCppFiles() {
 }
 
 function initProject() {
-    console.log("🚀 Initializing PRO C++ Project (C++20 Modules)...");
+    console.log(`${colors.cyan}${colors.bold}🚀 Initializing PRO C++ Project (C++20 Modules)...${colors.reset}`);
     const vscodeDir = path.join(process.cwd(), '.vscode');
     if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir);
 
@@ -125,7 +139,7 @@ function initProject() {
             "compilerArgs": [
                 "/std:c++20",
                 "/experimental:module",
-                "/ifcSearchDir", // Указываем IDE, где искать .ifc файлы!
+                "/ifcSearchDir",
                 "${workspaceFolder}/.build"
             ]
         }],
@@ -146,16 +160,16 @@ function initProject() {
     // 4. main.cpp template
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
     if (!fs.existsSync(mainCppPath)) {
-        fs.writeFileSync(mainCppPath, `import std.core;\n// C++20 Modules ready!\nint main() { return 0; }`);
+        fs.writeFileSync(mainCppPath, `import std.core;\n// C++20 Modules ready!\nint main() {\n    return 0;\n}`);
     }
 
-    console.log("✅ Ready! .vscode configs created. IntelliSense is pointed to .build/");
+    console.log(`${colors.green}✅ Ready! .vscode configs created. IntelliSense is pointed to .build/${colors.reset}`);
 }
 
 function buildAndRun() {
     const cppFiles = getSortedCppFiles();
     if (!cppFiles) {
-        console.error("❌ Error: No .cpp or .ixx files found!");
+        console.error(`${colors.red}❌ Error: No .cpp or .ixx files found!${colors.reset}`);
         return;
     }
 
@@ -165,13 +179,20 @@ function buildAndRun() {
 
     const outputExeName = `app_build_${Date.now()}.exe`;
     
-    console.log(`\n🔨 Compiling with SMART DEPENDENCY GRAPH...`);
+    console.log(`\n${colors.cyan}🔨 Compiling with SMART DEPENDENCY GRAPH...${colors.reset}`);
     
-    // Компилируем чисто, без странных флагов
+    // Clean compile command, no weird flags
     const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExeName}"`;
     
+    // Start the timer!
+    const startTime = performance.now();
+    
     if (runSyncCommand(compileCmd)) {
-        // МАГИЯ ПЕРЕНОСА: Двигаем все созданные файлы в папку .build
+        // Stop the timer!
+        const endTime = performance.now();
+        const buildTime = ((endTime - startTime) / 1000).toFixed(2);
+
+        // Move all artifacts to .build folder
         const files = fs.readdirSync(process.cwd());
         files.forEach(file => {
             if (file.endsWith('.obj') || file.endsWith('.ifc') || file.endsWith('.pdb') || file.endsWith('.ilk') || file === outputExeName) {
@@ -181,29 +202,31 @@ function buildAndRun() {
             }
         });
 
-        console.log(`🟢 RUNNING -> .build\\${outputExeName}\n` + "-".repeat(40));
+        console.log(`${colors.green}${colors.bold}⚡ [Success] Compiled in ${buildTime}s${colors.reset}`);
+        console.log(`${colors.yellow}🟢 RUNNING -> .build\\${outputExeName}${colors.reset}\n` + `${colors.gray}${"-".repeat(40)}${colors.reset}`);
         
-        // Запускаем из папки .build
+        // Run from .build folder
         currentAppProcess = spawn(`.\\.build\\${outputExeName}`, [], { shell: true, stdio: 'inherit' });
         currentAppProcess.on('close', (code) => {
-            if (code !== null) console.log("-".repeat(40) + `\n🛑 Process exited with code ${code}`);
+            if (code !== null) console.log(`${colors.gray}${"-".repeat(40)}${colors.reset}\n${colors.red}🛑 Process exited with code ${code}${colors.reset}`);
         });
     } else {
-        console.log(`\n❌ BUILD FAILED`);
+        console.log(`\n${colors.red}${colors.bold}❌ BUILD FAILED${colors.reset}`);
     }
 }
 
 function watchProject() {
-    console.log("👀 PRO C++ Watcher Started (Mode: Smart C++20 Modules)");
+    console.clear();
+    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (Mode: Smart C++20 Modules)${colors.reset}`);
     buildAndRun();
 
     fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
-        // Игнорируем всё, что происходит внутри папки .build
+        // Ignore changes inside .build to prevent infinite loops
         if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h')) && !filename.includes('.build')) {
             clearTimeout(watchTimeout);
             watchTimeout = setTimeout(() => {
                 console.clear();
-                console.log(`[${new Date().toLocaleTimeString()}] Change detected: ${filename}`);
+                console.log(`${colors.gray}[${new Date().toLocaleTimeString()}] Change detected: ${filename}${colors.reset}`);
                 buildAndRun();
             }, 300);
         }
@@ -214,5 +237,7 @@ switch (command) {
     case 'init': initProject(); break;
     case 'run': buildAndRun(); break;
     case 'watch': watchProject(); break;
-    default: console.log("🛠️ PRO CPP CLI\nUsage: procpp <init|run|watch>"); break;
+    default: 
+        console.log(`${colors.bold}🛠️ PRO CPP CLI${colors.reset}\nUsage: procpp <init|run|watch>`); 
+        break;
 }
