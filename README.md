@@ -50,6 +50,24 @@ Now `cl.exe` is recognized, and `procpp` can build your code!
 
 ---
 
+🐞 Advanced C++20 Debugging (The PRO Way)
+Want to run the `watch` hot-reload AND step through your code with `F5` at the same time?
+We've built a bulletproof PowerShell builder specifically for `C++20 Modules` that completely bypasses Windows file-lock issues.
+
+How to set it up in 2 steps:
+
+ 2. Download our magic build.ps1 and save it inside your .vscode/ folder.
+
+ 2. Replace your `.vscode/tasks.json` with this configuration.
+
+ That's it! Press F5 to start debugging. Our script will auto-resolve your C++ module dependencies while keeping the `procpp watch` terminal clean and running in the background.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/anton-po-github/pro-cpp-cli-core/main/assets/debug-pro-cpp-cli-core.gif" alt="PRO C++ CLI Demo" width="900">
+</p>
+
+---
+
 ✨ Features
 
  • `procpp init`: Creates `main.cpp` and perfect `.vscode` configs for a "one-click" debugging experience (F5). 
