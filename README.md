@@ -4,7 +4,7 @@ The ultimate Developer Experience (DX) for C++ on Windows. Inspired by Angular a
 Stop fighting with compilers, start writing code.
 
 <p align="center">
-  <img src="assets/demo-pro-cpp-cli-core.gif" alt="PRO C++ CLI Demo" width="600">
+  <img src="assets/demo-pro-cpp-cli-core.gif" alt="PRO C++ CLI Demo" width="900">
 </p>
 
 ## 🛠 Prerequisites
