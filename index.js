@@ -2,7 +2,8 @@
 
 /**
  * PRO C++ CLI Core (With C++20 Modules Topological Sorter)
- * FIX: Kept .ifc files alive for IntelliSense!
+ * FIX: Restored initProject!
+ * FIX: Smart post-build artifact routing to .build/ directory!
  */
 
 const { execSync, spawn } = require('child_process');
@@ -12,6 +13,8 @@ const path = require('path');
 const [,, command, ...args] = process.argv;
 let currentAppProcess = null;
 let watchTimeout = null;
+
+const BUILD_DIR = path.join(process.cwd(), '.build');
 
 function runSyncCommand(cmd) {
     try {
@@ -23,11 +26,19 @@ function runSyncCommand(cmd) {
 }
 
 function cleanupOldBuilds() {
-    const files = fs.readdirSync(process.cwd());
-    files.forEach(file => {
-        // PRO FIX: Removed .ifc from deletion list. IntelliSense needs them to resolve imports!
-        const isArtifact = file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || (file.startsWith('app_build_') && file.endsWith('.exe'));
-        if (isArtifact) {
+    // 1. Clean .build folder
+    if (fs.existsSync(BUILD_DIR)) {
+        const files = fs.readdirSync(BUILD_DIR);
+        files.forEach(file => {
+            if (file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || file.endsWith('.ifc') || file.startsWith('app_build_')) {
+                try { fs.unlinkSync(path.join(BUILD_DIR, file)); } catch (err) {}
+            }
+        });
+    }
+    // 2. Clean root folder (just in case)
+    const rootFiles = fs.readdirSync(process.cwd());
+    rootFiles.forEach(file => {
+        if (file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || file.endsWith('.ifc') || (file.startsWith('app_build_') && file.endsWith('.exe'))) {
             try { fs.unlinkSync(path.join(process.cwd(), file)); } catch (err) {}
         }
     });
@@ -41,7 +52,8 @@ function getSortedCppFiles() {
         for (const file of files) {
             const filePath = path.join(dir, file);
             if (fs.statSync(filePath).isDirectory()) {
-                if (file !== 'node_modules' && file !== '.vscode' && file !== 'build') {
+                // ИГНОРИРУЕМ ПАПКУ .build, ЧТОБЫ ВОЧЕР НЕ СОШЕЛ С УМА
+                if (file !== 'node_modules' && file !== '.vscode' && file !== '.build') {
                     scanDir(filePath);
                 }
             } else if (filePath.endsWith('.cpp') || filePath.endsWith('.ixx')) {
@@ -56,11 +68,7 @@ function getSortedCppFiles() {
         const exportsMatch = content.match(/export\s+module\s+([a-zA-Z0-9_]+)\s*;/);
         const importsMatches = [...content.matchAll(/import\s+([a-zA-Z0-9_]+)\s*;/g)].map(m => m[1]);
         
-        return {
-            file,
-            exports: exportsMatch ? exportsMatch[1] : null,
-            imports: importsMatches
-        };
+        return { file, exports: exportsMatch ? exportsMatch[1] : null, imports: importsMatches };
     });
 
     const sortedFiles = [];
@@ -91,25 +99,57 @@ function initProject() {
     const vscodeDir = path.join(process.cwd(), '.vscode');
     if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir);
 
-    const mainCppPath = path.join(process.cwd(), 'main.cpp');
-    const mainCppContent = `import std.core;\n// C++20 Modules ready!\nint main() { return 0; }`;
-    if (!fs.existsSync(mainCppPath)) fs.writeFileSync(mainCppPath, mainCppContent);
-
+    // 1. tasks.json
     const tasksContent = {
         "version": "2.0.0",
-        "tasks": [
-            {
-                "type": "cppbuild",
-                "label": "DEBUG-BUILD-MSVC",
-                "command": "cl.exe",
-                "args": ["/std:c++20", "/Zi", "/EHsc", "/nologo", "/Fe${fileDirname}\\debug_build.exe", "${file}"],
-                "problemMatcher": ["$msCompile"],
-                "group": "build"
-            }
-        ]
+        "tasks": [{
+            "type": "cppbuild",
+            "label": "DEBUG-BUILD-MSVC",
+            "command": "cl.exe",
+            "args": ["/std:c++20", "/Zi", "/EHsc", "/nologo", "/Fe${fileDirname}\\.build\\debug_build.exe", "${file}"],
+            "problemMatcher": ["$msCompile"],
+            "group": "build"
+        }]
     };
     fs.writeFileSync(path.join(vscodeDir, 'tasks.json'), JSON.stringify(tasksContent, null, 4));
-    console.log("✅ Ready! Standard set to C++20.");
+
+    // 2. c_cpp_properties.json (FIX FOR IDE SQUIGGLES!)
+    const propertiesContent = {
+        "configurations": [{
+            "name": "Win32",
+            "includePath": ["${workspaceFolder}/**"],
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compilerArgs": [
+                "/std:c++20",
+                "/experimental:module",
+                "/ifcSearchDir", // Указываем IDE, где искать .ifc файлы!
+                "${workspaceFolder}/.build"
+            ]
+        }],
+        "version": 4
+    };
+    fs.writeFileSync(path.join(vscodeDir, 'c_cpp_properties.json'), JSON.stringify(propertiesContent, null, 4));
+
+    // 3. settings.json (Hide .build folder from UI)
+    const settingsContent = {
+        "files.exclude": {
+            ".build": true,
+            "**/.build": true
+        },
+        "C_Cpp.errorSquiggles": "disabled"
+    };
+    fs.writeFileSync(path.join(vscodeDir, 'settings.json'), JSON.stringify(settingsContent, null, 4));
+
+    // 4. main.cpp template
+    const mainCppPath = path.join(process.cwd(), 'main.cpp');
+    if (!fs.existsSync(mainCppPath)) {
+        fs.writeFileSync(mainCppPath, `import std.core;\n// C++20 Modules ready!\nint main() { return 0; }`);
+    }
+
+    console.log("✅ Ready! .vscode configs created. IntelliSense is pointed to .build/");
 }
 
 function buildAndRun() {
@@ -121,15 +161,30 @@ function buildAndRun() {
 
     if (currentAppProcess) currentAppProcess.kill();
     cleanupOldBuilds();
+    if (!fs.existsSync(BUILD_DIR)) fs.mkdirSync(BUILD_DIR);
 
-    const outputExe = `app_build_${Date.now()}.exe`;
+    const outputExeName = `app_build_${Date.now()}.exe`;
+    
     console.log(`\n🔨 Compiling with SMART DEPENDENCY GRAPH...`);
     
-    const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExe}"`;
+    // Компилируем чисто, без странных флагов
+    const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExeName}"`;
     
     if (runSyncCommand(compileCmd)) {
-        console.log(`🟢 RUNNING -> ${outputExe}\n` + "-".repeat(40));
-        currentAppProcess = spawn(`.\\${outputExe}`, [], { shell: true, stdio: 'inherit' });
+        // МАГИЯ ПЕРЕНОСА: Двигаем все созданные файлы в папку .build
+        const files = fs.readdirSync(process.cwd());
+        files.forEach(file => {
+            if (file.endsWith('.obj') || file.endsWith('.ifc') || file.endsWith('.pdb') || file.endsWith('.ilk') || file === outputExeName) {
+                try {
+                    fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file));
+                } catch(e) {}
+            }
+        });
+
+        console.log(`🟢 RUNNING -> .build\\${outputExeName}\n` + "-".repeat(40));
+        
+        // Запускаем из папки .build
+        currentAppProcess = spawn(`.\\.build\\${outputExeName}`, [], { shell: true, stdio: 'inherit' });
         currentAppProcess.on('close', (code) => {
             if (code !== null) console.log("-".repeat(40) + `\n🛑 Process exited with code ${code}`);
         });
@@ -143,7 +198,8 @@ function watchProject() {
     buildAndRun();
 
     fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
-        if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h'))) {
+        // Игнорируем всё, что происходит внутри папки .build
+        if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h')) && !filename.includes('.build')) {
             clearTimeout(watchTimeout);
             watchTimeout = setTimeout(() => {
                 console.clear();
