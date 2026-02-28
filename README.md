@@ -62,13 +62,5 @@ Now `cl.exe` is recognized, and `procpp` can build your code!
 
 🧐 Why this package?
 
-Tired of configuring CMake and tasks.json for days just to test a simple C++ idea? pro-cpp-cli brings modern Web Development DX (like Vite/Nodemon) to the C++ world. Zero configuration. Native C++20 Modules support. Just write code.
-
----
-
-🐞 Debugging
-
-Just press F5! Our `init` command sets up a "Bulletproof" debugger configuration that won't conflict with the watcher.
-
-Created with ❤️ for the C++ Community.
+Tired of configuring CMake and tasks.json for days just to test a simple C++ idea? `pro-cpp-cli` brings modern Web Development DX (like Vite/Nodemon) to the C++ world. Zero configuration. Native C++20 Modules support. Just write code.
 
