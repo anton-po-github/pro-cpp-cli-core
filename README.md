@@ -80,7 +80,7 @@ How to set it up in 2 steps:
 
 🧐 Why this package?
 
-Tired of configuring CMake and tasks.json for days just to test a simple C++ idea? `pro-cpp-cli` brings modern Web Development DX (like Vite/Nodemon) to the C++ world. Zero configuration. Native C++20 Modules support. Just write code.
+Tired of configuring CMake and tasks.json for days just to test a simple C++ idea? `pro-cpp-cli-core` brings modern Web Development DX (like Vite/Nodemon) to the C++ world. Zero configuration. Native C++20 Modules support. Just write code.
 
 ---
 
