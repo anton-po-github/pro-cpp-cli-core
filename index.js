@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * PRO C++ CLI Core (With C++20 Modules Topological Sorter)
- * FIX: Restored initProject!
- * FIX: Smart post-build artifact routing to .build/ directory!
- * NEW: Build time measurement using performance.now()
- * NEW: Native ANSI terminal colors for PRO Developer Experience
+ * PRO C++ CLI Core (V1.0.7)
+ * - Added Environment Check (cl.exe validation)
+ * - Added Versioning (-v, --version)
+ * - Improved 'init' template for 100% success rate
+ * - Native ANSI Colors & Performance Tracking
  */
 
 const { execSync, spawn } = require('child_process');
@@ -13,13 +13,13 @@ const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
 
-const [,, command, ...args] = process.argv;
+const packageJson = require('./package.json');
+const [,, command] = process.argv;
 let currentAppProcess = null;
 let watchTimeout = null;
 
 const BUILD_DIR = path.join(process.cwd(), '.build');
 
-// ANSI Color codes for a beautiful console UI (Zero dependencies!)
 const colors = {
     reset: "\x1b[0m",
     cyan: "\x1b[36m",
@@ -29,6 +29,19 @@ const colors = {
     gray: "\x1b[90m",
     bold: "\x1b[1m"
 };
+
+// --- UTILS ---
+
+function checkEnv() {
+    try {
+        execSync('cl.exe', { stdio: 'ignore' });
+        return true;
+    } catch (e) {
+        console.error(`\n${colors.red}${colors.bold}❌ MSVC Compiler (cl.exe) NOT FOUND!${colors.reset}`);
+        console.log(`${colors.yellow}💡 Fix: Please use "Developer PowerShell for VS 2022" or "Developer Command Prompt".${colors.reset}\n`);
+        return false;
+    }
+}
 
 function runSyncCommand(cmd) {
     try {
@@ -40,34 +53,26 @@ function runSyncCommand(cmd) {
 }
 
 function cleanupOldBuilds() {
-    // 1. Clean .build folder
     if (fs.existsSync(BUILD_DIR)) {
         const files = fs.readdirSync(BUILD_DIR);
         files.forEach(file => {
-            if (file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || file.endsWith('.ifc') || file.startsWith('app_build_')) {
+            if (['.obj', '.pdb', '.ilk', '.ifc'].some(ext => file.endsWith(ext)) || file.startsWith('app_build_')) {
                 try { fs.unlinkSync(path.join(BUILD_DIR, file)); } catch (err) {}
             }
         });
     }
-    // 2. Clean root folder (just in case)
-    const rootFiles = fs.readdirSync(process.cwd());
-    rootFiles.forEach(file => {
-        if (file.endsWith('.obj') || file.endsWith('.pdb') || file.endsWith('.ilk') || file.endsWith('.ifc') || (file.startsWith('app_build_') && file.endsWith('.exe'))) {
-            try { fs.unlinkSync(path.join(process.cwd(), file)); } catch (err) {}
-        }
-    });
 }
 
 function getSortedCppFiles() {
     const fileList = [];
-    
     function scanDir(dir) {
+        if (!fs.existsSync(dir)) return;
         const files = fs.readdirSync(dir);
         for (const file of files) {
             const filePath = path.join(dir, file);
-            if (fs.statSync(filePath).isDirectory()) {
-                // Ignore .build directory so watcher doesn't loop
-                if (file !== 'node_modules' && file !== '.vscode' && file !== '.build') {
+            const stat = fs.statSync(filePath);
+            if (stat.isDirectory()) {
+                if (file !== 'node_modules' && file !== '.vscode' && file !== '.build' && !file.startsWith('.')) {
                     scanDir(filePath);
                 }
             } else if (filePath.endsWith('.cpp') || filePath.endsWith('.ixx')) {
@@ -77,11 +82,12 @@ function getSortedCppFiles() {
     }
     scanDir(process.cwd());
 
+    if (fileList.length === 0) return null;
+
     const fileData = fileList.map(file => {
         const content = fs.readFileSync(file, 'utf8');
         const exportsMatch = content.match(/export\s+module\s+([a-zA-Z0-9_]+)\s*;/);
         const importsMatches = [...content.matchAll(/import\s+([a-zA-Z0-9_]+)\s*;/g)].map(m => m[1]);
-        
         return { file, exports: exportsMatch ? exportsMatch[1] : null, imports: importsMatches };
     });
 
@@ -93,12 +99,10 @@ function getSortedCppFiles() {
         if (visited.has(node.file)) return;
         if (processing.has(node.file)) return;
         processing.add(node.file);
-
         node.imports.forEach(imp => {
             const dep = fileData.find(f => f.exports === imp);
             if (dep) visit(dep);
         });
-
         processing.delete(node.file);
         visited.add(node.file);
         sortedFiles.push(`"${node.file}"`);
@@ -108,65 +112,49 @@ function getSortedCppFiles() {
     return sortedFiles.join(' ');
 }
 
+// --- COMMANDS ---
+
 function initProject() {
-    console.log(`${colors.cyan}${colors.bold}🚀 Initializing PRO C++ Project (C++20 Modules)...${colors.reset}`);
+    console.log(`${colors.cyan}${colors.bold}🚀 Initializing PRO C++ Project...${colors.reset}`);
     const vscodeDir = path.join(process.cwd(), '.vscode');
     if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir);
 
-    // 1. tasks.json
-    const tasksContent = {
+    const tasks = {
         "version": "2.0.0",
         "tasks": [{
-            "type": "cppbuild",
-            "label": "DEBUG-BUILD-MSVC",
-            "command": "cl.exe",
-            "args": ["/std:c++20", "/Zi", "/EHsc", "/nologo", "/Fe${fileDirname}\\.build\\debug_build.exe", "${file}"],
-            "problemMatcher": ["$msCompile"],
-            "group": "build"
+            "label": "PRO-CPP-BUILD",
+            "type": "shell",
+            "command": "procpp run",
+            "group": { "kind": "build", "isDefault": true }
         }]
     };
-    fs.writeFileSync(path.join(vscodeDir, 'tasks.json'), JSON.stringify(tasksContent, null, 4));
+    fs.writeFileSync(path.join(vscodeDir, 'tasks.json'), JSON.stringify(tasks, null, 4));
 
-    // 2. c_cpp_properties.json (FIX FOR IDE SQUIGGLES!)
-    const propertiesContent = {
+    const props = {
         "configurations": [{
             "name": "Win32",
             "includePath": ["${workspaceFolder}/**"],
             "compilerPath": "cl.exe",
-            "cStandard": "c17",
             "cppStandard": "c++20",
             "intelliSenseMode": "windows-msvc-x64",
-            "compilerArgs": [
-                "/std:c++20",
-                "/experimental:module",
-                "/ifcSearchDir",
-                "${workspaceFolder}/.build"
-            ]
+            "compilerArgs": ["/std:c++20", "/experimental:module", "/ifcSearchDir", "${workspaceFolder}/.build"]
         }],
         "version": 4
     };
-    fs.writeFileSync(path.join(vscodeDir, 'c_cpp_properties.json'), JSON.stringify(propertiesContent, null, 4));
+    fs.writeFileSync(path.join(vscodeDir, 'c_cpp_properties.json'), JSON.stringify(props, null, 4));
 
-    // 3. settings.json (Hide .build folder from UI)
-    const settingsContent = {
-        "files.exclude": {
-            ".build": true,
-            "**/.build": true
-        },
-        "C_Cpp.errorSquiggles": "disabled"
-    };
-    fs.writeFileSync(path.join(vscodeDir, 'settings.json'), JSON.stringify(settingsContent, null, 4));
-
-    // 4. main.cpp template
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
     if (!fs.existsSync(mainCppPath)) {
-        fs.writeFileSync(mainCppPath, `import std.core;\n// C++20 Modules ready!\nint main() {\n    return 0;\n}`);
+        // Using standard include for max compatibility in template
+        fs.writeFileSync(mainCppPath, `#include <iostream>\n\nint main() {\n    std::cout << "🚀 PRO C++ is running!" << std::endl;\n    return 0;\n}`);
     }
 
-    console.log(`${colors.green}✅ Ready! .vscode configs created. IntelliSense is pointed to .build/${colors.reset}`);
+    console.log(`${colors.green}✅ Ready! Use 'procpp watch' to start developing.${colors.reset}`);
 }
 
 function buildAndRun() {
+    if (!checkEnv()) return;
+
     const cppFiles = getSortedCppFiles();
     if (!cppFiles) {
         console.error(`${colors.red}❌ Error: No .cpp or .ixx files found!${colors.reset}`);
@@ -178,37 +166,27 @@ function buildAndRun() {
     if (!fs.existsSync(BUILD_DIR)) fs.mkdirSync(BUILD_DIR);
 
     const outputExeName = `app_build_${Date.now()}.exe`;
+    console.log(`\n${colors.cyan}🔨 Compiling...${colors.reset}`);
     
-    console.log(`\n${colors.cyan}🔨 Compiling with SMART DEPENDENCY GRAPH...${colors.reset}`);
-    
-    // Clean compile command, no weird flags
-    const compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputExeName}"`;
-    
-    // Start the timer!
     const startTime = performance.now();
+    const compileCmd = `cl.exe /std:c++20 /nologo /EHsc /Zi ${cppFiles} /Fe"${outputExeName}"`;
     
     if (runSyncCommand(compileCmd)) {
-        // Stop the timer!
-        const endTime = performance.now();
-        const buildTime = ((endTime - startTime) / 1000).toFixed(2);
+        const buildTime = ((performance.now() - startTime) / 1000).toFixed(2);
 
-        // Move all artifacts to .build folder
-        const files = fs.readdirSync(process.cwd());
-        files.forEach(file => {
-            if (file.endsWith('.obj') || file.endsWith('.ifc') || file.endsWith('.pdb') || file.endsWith('.ilk') || file === outputExeName) {
-                try {
-                    fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file));
-                } catch(e) {}
+        // Move artifacts to .build
+        fs.readdirSync(process.cwd()).forEach(file => {
+            if (['.obj', '.ifc', '.pdb', '.ilk'].some(ext => file.endsWith(ext)) || file === outputExeName) {
+                try { fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file)); } catch(e) {}
             }
         });
 
         console.log(`${colors.green}${colors.bold}⚡ [Success] Compiled in ${buildTime}s${colors.reset}`);
-        console.log(`${colors.yellow}🟢 RUNNING -> .build\\${outputExeName}${colors.reset}\n` + `${colors.gray}${"-".repeat(40)}${colors.reset}`);
+        console.log(`${colors.yellow}🟢 RUNNING -> ${outputExeName}${colors.reset}\n` + `${colors.gray}${"-".repeat(40)}${colors.reset}`);
         
-        // Run from .build folder
         currentAppProcess = spawn(`.\\.build\\${outputExeName}`, [], { shell: true, stdio: 'inherit' });
         currentAppProcess.on('close', (code) => {
-            if (code !== null) console.log(`${colors.gray}${"-".repeat(40)}${colors.reset}\n${colors.red}🛑 Process exited with code ${code}${colors.reset}`);
+            if (code !== null) console.log(`${colors.gray}${"-".repeat(40)}${colors.reset}\n${colors.red}🛑 Process exited (code ${code})${colors.reset}`);
         });
     } else {
         console.log(`\n${colors.red}${colors.bold}❌ BUILD FAILED${colors.reset}`);
@@ -216,12 +194,12 @@ function buildAndRun() {
 }
 
 function watchProject() {
+    if (!checkEnv()) return;
     console.clear();
-    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (Mode: Smart C++20 Modules)${colors.reset}`);
+    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started${colors.reset}`);
     buildAndRun();
 
     fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
-        // Ignore changes inside .build to prevent infinite loops
         if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h')) && !filename.includes('.build')) {
             clearTimeout(watchTimeout);
             watchTimeout = setTimeout(() => {
@@ -233,11 +211,20 @@ function watchProject() {
     });
 }
 
+// --- CLI ROUTER ---
+
+const versionFlags = ['-v', '--version', 'version'];
+if (versionFlags.includes(command)) {
+    console.log(`${colors.bold}pro-cpp-cli-core v${packageJson.version}${colors.reset}`);
+    process.exit(0);
+}
+
 switch (command) {
     case 'init': initProject(); break;
     case 'run': buildAndRun(); break;
     case 'watch': watchProject(); break;
     default: 
-        console.log(`${colors.bold}🛠️ PRO CPP CLI${colors.reset}\nUsage: procpp <init|run|watch>`); 
+        console.log(`${colors.bold}🛠️ PRO CPP CLI v${packageJson.version}${colors.reset}`);
+        console.log(`Usage: procpp <init|run|watch|version>`); 
         break;
 }

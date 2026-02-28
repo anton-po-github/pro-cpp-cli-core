@@ -1,31 +1,18 @@
 {
   "name": "pro-cpp-cli-core",
-  "version": "1.0.6",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/anton-po-github/pro-cpp-cli-core.git"
-  },
-  "bugs": {
-    "url": "https://github.com/anton-po-github/pro-cpp-cli-core/issues"
-  },
-  "homepage": "https://github.com/anton-po-github/pro-cpp-cli-core#readme",
-  "description": "The ultimate C++ Developer Experience for Windows. Zero config, hot-reload, C++20 Modules support.",
+  "version": "1.0.7",
+  "description": "The ultimate C++ Developer Experience for Windows.",
   "main": "index.js",
   "bin": {
     "procpp": "./index.js"
-  },
-  "scripts": {
-    "start": "node index.js"
   },
   "keywords": [
     "cpp",
     "c++",
     "cli",
     "watch",
-    "build",
     "hot-reload",
     "c++20",
-    "modules",
     "msvc"
   ],
   "author": "PRO Developer",
