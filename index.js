@@ -147,16 +147,16 @@ function initProject() {
     if (!fs.existsSync(mainCppPath)) {
         // FIXED TEMPLATE: Added Windows UTF-8 support to fix "ЁЯЪА"
         const template = 
-                        `#include <iostream>
-                        #include <windows.h>
+`#include <iostream>
+#include <windows.h>
 
-                        int main() {
-                            // Set console output to UTF-8 to support emojis and international text
-                            SetConsoleOutputCP(CP_UTF8);
+int main() {
+    // Set console output to UTF-8 to support emojis and international text
+    SetConsoleOutputCP(CP_UTF8);
 
-                            std::cout << "🚀 PRO C++ is running!" << std::endl;
-                            return 0;
-                        }`;
+    std::cout << "🚀 PRO C++ is running!" << std::endl;
+    return 0;
+}`;
         fs.writeFileSync(mainCppPath, template);
     }
 
