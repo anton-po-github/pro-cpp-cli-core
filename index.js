@@ -4,7 +4,7 @@
  * PRO C++ CLI Core (V1.0.7)
  * - Added Environment Check (cl.exe validation)
  * - Added Versioning (-v, --version)
- * - Improved 'init' template for 100% success rate
+ * - Fixed UTF-8 Encoding in C++ template (No more "ЁЯЪА")
  * - Native ANSI Colors & Performance Tracking
  */
 
@@ -145,8 +145,19 @@ function initProject() {
 
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
     if (!fs.existsSync(mainCppPath)) {
-        // Using standard include for max compatibility in template
-        fs.writeFileSync(mainCppPath, `#include <iostream>\n\nint main() {\n    std::cout << "🚀 PRO C++ is running!" << std::endl;\n    return 0;\n}`);
+        // FIXED TEMPLATE: Added Windows UTF-8 support to fix "ЁЯЪА"
+        const template = 
+                        `#include <iostream>
+                        #include <windows.h>
+
+                        int main() {
+                            // Set console output to UTF-8 to support emojis and international text
+                            SetConsoleOutputCP(CP_UTF8);
+
+                            std::cout << "🚀 PRO C++ is running!" << std::endl;
+                            return 0;
+                        }`;
+        fs.writeFileSync(mainCppPath, template);
     }
 
     console.log(`${colors.green}✅ Ready! Use 'procpp watch' to start developing.${colors.reset}`);
