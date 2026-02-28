@@ -56,9 +56,9 @@ We've built a bulletproof PowerShell builder specifically for `C++20 Modules` th
 
 How to set it up in 2 steps:
 
- 2. Download our magic build.ps1 and save it inside your .vscode/ folder.
+ 2. Download our magic [build.ps1](https://github.com/anton-po-github/pro-cpp/blob/main/.vscode/build.ps1) and save it inside your .vscode/ folder.
 
- 2. Replace your `.vscode/tasks.json` with this configuration.
+ 2. Replace your `.vscode/tasks.json` with [this configuration](https://github.com/anton-po-github/pro-cpp/blob/main/.vscode/tasks.json).
 
  That's it! Press F5 to start debugging. Our script will auto-resolve your C++ module dependencies while keeping the `procpp watch` terminal clean and running in the background.
 
