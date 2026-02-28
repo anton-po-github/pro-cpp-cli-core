@@ -3,6 +3,10 @@
 The ultimate Developer Experience (DX) for C++ on Windows. Inspired by Angular and .NET CLI. 
 Stop fighting with compilers, start writing code.
 
+<p align="center">
+  <img src="assets/demo-pro-cpp-cli-core.gif" alt="PRO C++ CLI Demo" width="600">
+</p>
+
 ## 🛠 Prerequisites
 
 This tool is designed for **Windows** and requires **Visual Studio 2022** (Community, Pro, or Enterprise).
@@ -40,7 +44,7 @@ To use `procpp` inside VS Code terminal, you MUST use the Developer Environment:
 
  3. Select `Developer PowerShell for VS 2022`.
 
- 4. Open a NEW terminal.
+ 4. Open a `NEW terminal`. 💡
 
 Now `cl.exe` is recognized, and `procpp` can build your code!
 
