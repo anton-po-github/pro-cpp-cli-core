@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 /**
- * PRO C++ CLI Core (V1.1.1)
- * - Improved Cleanup: Added support for cleaning up old .dll, .lib, and .exp files
- * - Fixed file prefix matching for automated build artifacts
- * - Optimized artifact management in the .build directory
+ * PRO C++ CLI Core (V1.1.0)
+ * - Added DLL compilation target (.NET 10+ compatible)
+ * - Enforced x64 architecture checks and linker flags
+ * - Added static runtime linking (/MT) to prevent DllNotFoundException (0x8007007E)
+ * - Added aggressive cleanup for intermediate files (.obj, .pdb, .ilk, .exp, .lib)
+ * - Environment Check (cl.exe validation for x64)
  */
+
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
 const packageJson = require('./package.json');
 
-const [,, command, targetMode] = process.argv; // targetMode can be 'dll' or undefined
+const [,, command, target] = process.argv;
 let currentAppProcess = null;
 let watchTimeout = null;
+
 const BUILD_DIR = path.join(process.cwd(), '.build');
 
 const colors = {
@@ -23,28 +27,29 @@ const colors = {
     yellow: "\x1b[33m",
     red: "\x1b[31m",
     gray: "\x1b[90m",
-    bold: "\x1b[1m"
+    bold: "\x1b[1m",
+    magenta: "\x1b[35m"
 };
 
 // --- UTILS ---
 
-/**
- * Validates if the MSVC compiler is available in the current environment.
- */
 function checkEnv() {
     try {
-        execSync('cl.exe', { stdio: 'ignore' });
+        const output = execSync('cl.exe 2>&1', { encoding: 'utf8', stdio: 'pipe' });
+        
+        // Strict check for x64 architecture to avoid LNK1112 and .NET load errors
+        if (!output.includes('x64')) {
+            console.log(`\n${colors.yellow}${colors.bold}⚠️ WARNING: Compiler does not seem to be x64!${colors.reset}`);
+            console.log(`${colors.gray}For .NET 10 compatibility, ensure You are using "x64 Native Tools Command Prompt for VS".${colors.reset}\n`);
+        }
         return true;
     } catch (e) {
         console.error(`\n${colors.red}${colors.bold}❌ MSVC Compiler (cl.exe) NOT FOUND!${colors.reset}`);
-        console.log(`${colors.yellow}💡 Fix: Please use "Developer PowerShell for VS 2022" or "Developer Command Prompt".${colors.reset}\n`);
+        console.log(`${colors.yellow}💡 Fix: Please use "x64 Native Tools Command Prompt for VS 2022".${colors.reset}\n`);
         return false;
     }
 }
 
-/**
- * Executes a shell command synchronously and inherits stdio.
- */
 function runSyncCommand(cmd) {
     try {
         execSync(cmd, { stdio: 'inherit' });
@@ -54,40 +59,28 @@ function runSyncCommand(cmd) {
     }
 }
 
-/**
- * Cleans up previous build artifacts to prevent disk clutter.
- * Focuses on 'app_build_' prefix and common MSVC extensions.
- */
 function cleanupOldBuilds() {
     if (fs.existsSync(BUILD_DIR)) {
         const files = fs.readdirSync(BUILD_DIR);
         files.forEach(file => {
-            const isOurBuild = file.startsWith('app_build_');
-            const isArtifact = ['.obj', '.pdb', '.ilk', '.ifc', '.exp', '.lib', '.dll', '.exe'].some(ext => file.endsWith(ext));
-
-            if (isOurBuild || isArtifact) {
-                try {
-                    // Force delete the old build files
-                    fs.unlinkSync(path.join(BUILD_DIR, file));
-                } catch (err) {
-                    // File might be locked by another process, skip quietly
-                }
+            if (['.obj', '.pdb', '.ilk', '.ifc', '.exp', '.lib', '.dll', '.exe'].some(ext => file.endsWith(ext)) || file.startsWith('app_build')) {
+                try { fs.unlinkSync(path.join(BUILD_DIR, file)); } catch (err) {}
             }
         });
     }
 }
 
-/**
- * Scans for .cpp and .ixx files and sorts them based on module dependencies.
- */
 function getSortedCppFiles() {
     const fileList = [];
+
     function scanDir(dir) {
         if (!fs.existsSync(dir)) return;
         const files = fs.readdirSync(dir);
+
         for (const file of files) {
             const filePath = path.join(dir, file);
             const stat = fs.statSync(filePath);
+
             if (stat.isDirectory()) {
                 if (file !== 'node_modules' && file !== '.vscode' && file !== '.build' && !file.startsWith('.')) {
                     scanDir(filePath);
@@ -97,6 +90,7 @@ function getSortedCppFiles() {
             }
         }
     }
+
     scanDir(process.cwd());
     if (fileList.length === 0) return null;
 
@@ -114,11 +108,13 @@ function getSortedCppFiles() {
     function visit(node) {
         if (visited.has(node.file)) return;
         if (processing.has(node.file)) return;
+
         processing.add(node.file);
         node.imports.forEach(imp => {
             const dep = fileData.find(f => f.exports === imp);
             if (dep) visit(dep);
         });
+        
         processing.delete(node.file);
         visited.add(node.file);
         sortedFiles.push(`"${node.file}"`);
@@ -130,9 +126,6 @@ function getSortedCppFiles() {
 
 // --- COMMANDS ---
 
-/**
- * Initializes a new PRO C++ project with VS Code configurations.
- */
 function initProject() {
     console.log(`${colors.cyan}${colors.bold}🚀 Initializing PRO C++ Project...${colors.reset}`);
     const vscodeDir = path.join(process.cwd(), '.vscode');
@@ -151,7 +144,7 @@ function initProject() {
 
     const props = {
         "configurations": [{
-            "name": "Win32",
+            "name": "Win64",
             "includePath": ["${workspaceFolder}/**"],
             "compilerPath": "cl.exe",
             "cppStandard": "c++20",
@@ -164,9 +157,15 @@ function initProject() {
 
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
     if (!fs.existsSync(mainCppPath)) {
-        const template =
+        // C++ Template includes an example for DLL export to help with .NET integration
+        const template = 
 `#include <iostream>
 #include <windows.h>
+
+// Example of a function exported for .NET 10+ (P/Invoke)
+extern "C" __declspec(dllexport) int AddNumbers(int a, int b) {
+    return a + b;
+}
 
 int main() {
     SetConsoleOutputCP(CP_UTF8);
@@ -175,60 +174,74 @@ int main() {
 }`;
         fs.writeFileSync(mainCppPath, template);
     }
-    console.log(`${colors.green}✅ Ready! Use 'procpp watch' to start developing.${colors.reset}`);
+
+    console.log(`${colors.green}✅ Ready! Use 'procpp watch' for EXE or 'procpp watch dll' for Libraries.${colors.reset}`);
 }
 
-/**
- * Compiles and optionally runs the C++ project.
- * Supports both .exe and .dll targets.
- */
-function buildAndRun(mode) {
+function buildAndRun(buildTarget) {
     if (!checkEnv()) return;
-    const isDll = mode === 'dll';
-    const extension = isDll ? '.dll' : '.exe';
-    
+
     const cppFiles = getSortedCppFiles();
     if (!cppFiles) {
         console.error(`${colors.red}❌ Error: No .cpp or .ixx files found!${colors.reset}`);
         return;
     }
 
-    // Terminate existing process before building
-    if (currentAppProcess) currentAppProcess.kill();
-    
-    // Perform thorough cleanup of previous build artifacts
+    if (currentAppProcess) {
+        currentAppProcess.kill();
+        currentAppProcess = null;
+    }
+
     cleanupOldBuilds();
-    
     if (!fs.existsSync(BUILD_DIR)) fs.mkdirSync(BUILD_DIR);
 
-    const outputName = `app_build_${Date.now()}${extension}`;
-    
-    console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? '[DLL]' : '[EXE]'}...${colors.reset}`);
+    const isDll = buildTarget === 'dll';
+    const ext = isDll ? '.dll' : '.exe';
+    const outputFileName = `app_build_${Date.now()}${ext}`;
+
+    console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? 'DLL Library' : 'Executable'} (x64)...${colors.reset}`);
     const startTime = performance.now();
 
-    // /LD flag is used for DLL compilation
-    const dllFlag = isDll ? '/LD ' : '';
-    const compileCmd = `cl.exe ${dllFlag}/std:c++20 /nologo /EHsc /Zi ${cppFiles} /Fe"${outputName}"`;
+    // /MT statically links the runtime to prevent 0x8007007E DllNotFoundException on servers
+    // /LD compiles as DLL
+    // /link /MACHINE:X64 forces 64-bit linking
+    let compileCmd = `cl.exe /std:c++20 /nologo /EHsc /Zi ${cppFiles} /Fe"${outputFileName}"`;
+    
+    if (isDll) {
+        compileCmd = `cl.exe /std:c++20 /nologo /EHsc /Zi /MT /LD ${cppFiles} /Fe"${outputFileName}" /link /MACHINE:X64`;
+    }
 
     if (runSyncCommand(compileCmd)) {
         const buildTime = ((performance.now() - startTime) / 1000).toFixed(2);
         
-        // Move all artifacts to the .build folder
+        // Handle artifacts
+        const junkExtensions = ['.obj', '.ifc', '.pdb', '.ilk', '.exp', '.lib'];
         fs.readdirSync(process.cwd()).forEach(file => {
-            const artifactExts = ['.obj', '.ifc', '.pdb', '.ilk', '.exp', '.lib'];
-            if (artifactExts.some(ext => file.endsWith(ext)) || file === outputName) {
+            const isOutput = file === outputFileName;
+            const isJunk = junkExtensions.some(e => file.endsWith(e));
+
+            if (isOutput) {
+                // Move the main artifact (.exe or .dll) to .build directory
                 try { fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file)); } catch(e) {}
+            } else if (isJunk) {
+                if (isDll) {
+                    // Aggressive cleanup for DLL builds: wipe out all junk files to keep it clean
+                    try { fs.unlinkSync(path.join(process.cwd(), file)); } catch(e) {}
+                } else {
+                    // Move junk to .build for EXE (useful for debugging)
+                    try { fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file)); } catch(e) {}
+                }
             }
         });
 
-        console.log(`${colors.green}${colors.bold}⚡ [Success] ${isDll ? 'Library' : 'Binary'} created in ${buildTime}s${colors.reset}`);
-        
+        console.log(`${colors.green}${colors.bold}⚡ [Success] Compiled ${outputFileName} in ${buildTime}s${colors.reset}`);
+
         if (isDll) {
-            console.log(`${colors.yellow}📦 DLL READY -> .\\.build\\${outputName}${colors.reset}`);
-            console.log(`${colors.gray}Integrate it into your .NET project using P/Invoke!${colors.reset}\n`);
+            console.log(`${colors.magenta}📦 DLL is ready in .build/ for .NET 10 integration.${colors.reset}\n + ${colors.gray}${"-".repeat(40)}${colors.reset}`);
         } else {
-            console.log(`${colors.yellow}🟢 RUNNING -> ${outputName}${colors.reset}\n${colors.gray}${"-".repeat(40)}${colors.reset}`);
-            currentAppProcess = spawn(`.\\.build\\${outputName}`, [], { shell: true, stdio: 'inherit' });
+            console.log(`${colors.yellow}🟢 RUNNING -> ${outputFileName}${colors.reset}\n + ${colors.gray}${"-".repeat(40)}${colors.reset}`);
+            currentAppProcess = spawn(`.\\.build\\${outputFileName}`, [], { shell: true, stdio: 'inherit' });
+            
             currentAppProcess.on('close', (code) => {
                 if (code !== null) console.log(`${colors.gray}${"-".repeat(40)}${colors.reset}\n${colors.red}🛑 Process exited (code ${code})${colors.reset}`);
             });
@@ -238,23 +251,20 @@ function buildAndRun(mode) {
     }
 }
 
-/**
- * Starts a file watcher to automatically recompile on changes.
- */
-function watchProject(mode) {
+function watchProject(buildTarget) {
     if (!checkEnv()) return;
     console.clear();
-    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ ${mode === 'dll' ? '[DLL]' : '[EXE]'} Watcher Started${colors.reset}`);
-    buildAndRun(mode);
+    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${buildTarget === 'dll' ? 'DLL Mode' : 'EXE Mode'})${colors.reset}`);
+    
+    buildAndRun(buildTarget);
 
     fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
-        const allowedExts = ['.cpp', '.ixx', '.h', '.hpp'];
-        if (filename && allowedExts.some(ext => filename.endsWith(ext)) && !filename.includes('.build')) {
+        if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h')) && !filename.includes('.build')) {
             clearTimeout(watchTimeout);
             watchTimeout = setTimeout(() => {
                 console.clear();
                 console.log(`${colors.gray}[${new Date().toLocaleTimeString()}] Change detected: ${filename}${colors.reset}`);
-                buildAndRun(mode);
+                buildAndRun(buildTarget);
             }, 300);
         }
     });
@@ -273,13 +283,13 @@ switch (command) {
         initProject(); 
         break;
     case 'run': 
-        buildAndRun(targetMode); 
+        buildAndRun(target); 
         break;
     case 'watch': 
-        watchProject(targetMode); 
+        watchProject(target); 
         break;
-    default:
+    default: 
         console.log(`${colors.bold}🛠️ PRO CPP CLI v${packageJson.version}${colors.reset}`);
-        console.log(`Usage: procpp <init|run|watch|version> [dll]`);
+        console.log(`Usage: procpp <init|run|watch|version> [dll]`); 
         break;
 }
