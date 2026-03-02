@@ -197,7 +197,8 @@ function buildAndRun(buildTarget) {
 
     const isDll = buildTarget === 'dll';
     const ext = isDll ? '.dll' : '.exe';
-    const outputFileName = `app_build_${Date.now()}${ext}`;
+   // const outputFileName = `app_build_${Date.now()}${ext}`;
+    const outputFileName = isDll ? `MediaEngine.dll` : `app_build_${Date.now()}${ext}`;
 
     console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? 'DLL Library' : 'Executable'} (x64)...${colors.reset}`);
     const startTime = performance.now();
