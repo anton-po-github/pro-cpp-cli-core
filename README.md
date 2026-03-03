@@ -75,23 +75,25 @@ How to set it up in 2 steps:
 ✨ Features (The PRO Way)
 
 💎 Smart C++20 Modules Handling
-Forget about manual build order. `procpp` automatically scans Your `.ixx` (interfaces) and `.cpp` files, detects `export module` and `import` statements, and performs Topological Sorting to compile everything in the correct order.
+Forget about manual build order. `procpp` automatically scans your `.ixx` (interfaces) and `.cpp` files, detects `export module` and `import` statements, and performs Topological Sorting to compile everything in the correct order.
 
 ---
 
 📦 .NET 10+ Integration Ready
 Compiling DLLs for C# usually brings headaches like `DllNotFoundException`. We fixed it:
 
- • Static Runtime Linking (/MT): All dependencies are packed into the DLL. No need for VC++ Redistributable on the server.
+ 1. Static Runtime Linking (/MT): All dependencies are packed into the DLL. No need for VC++ Redistributable on the server.
 
- • x64 Architecture Enforcement: Automatic checks to ensure Your DLL matches Your .NET runtime architecture.
+ 2. x64 Architecture Enforcement: Automatic checks to ensure your DLL matches your .NET runtime architecture. It is important to use the `x64 native tools command prompt for VS.`💡
 
- • Clean Artifacts: Auto-cleanup of `.obj`, `.exp`, `.lib`, and `.pdb` files to keep Your workspace pristine.
+ 3. Clean Artifacts: Auto-cleanup of `.obj`, `.exp`, `.lib`, and `.pdb` files to keep your workspace pristine.
+
+---
 
 ⌨️ Dynamic DLL Naming
-No more hardcoded filenames. You have two ways to name Your library:
+No more hardcoded filenames. You have two ways to name your library:
 
- 1. Interactive: Just run `procpp watch dll` and the CLI will ask You for a name.
+ 1. Interactive: Just run `procpp watch dll` and the CLI will ask you for a name.
 
  2. Fast-Track: Run `procpp watch dll MyEngine` to skip prompts and build `MyEngine.dll` immediately.
 
