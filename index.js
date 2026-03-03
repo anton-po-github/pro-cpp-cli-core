@@ -1,20 +1,26 @@
 #!/usr/bin/env node
+
 /**
- * PRO C++ CLI Core (V1.1.0)
+ * PRO C++ CLI Core (V1.2.0)
+ * - Added comprehensive Help Menu (-h, --help) like dotnet CLI
+ * - Added Dynamic DLL Naming with Readline prompt
+ * - Added Fast-Track CLI argument support (e.g. procpp watch dll MyLib)
+ * - Persistent name caching during watch mode
  * - Added DLL compilation target (.NET 10+ compatible)
  * - Enforced x64 architecture checks and linker flags
  * - Added static runtime linking (/MT) to prevent DllNotFoundException (0x8007007E)
- * - Added aggressive cleanup for intermediate files (.obj, .pdb, .ilk, .exp, .lib)
- * - Environment Check (cl.exe validation for x64)
+ * - Added aggressive cleanup for intermediate files
  */
 
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
+const readline = require('readline');
 const packageJson = require('./package.json');
 
-const [,, command, target] = process.argv;
+// Extracting optional 4th argument for fast-track naming
+const [,, command, target, optionalName] = process.argv;
 let currentAppProcess = null;
 let watchTimeout = null;
 
@@ -32,6 +38,34 @@ const colors = {
 };
 
 // --- UTILS ---
+
+// Helper function to prompt user in the console
+function askQuestion(query) {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    return new Promise(resolve => rl.question(query, ans => {
+        rl.close();
+        resolve(ans);
+    }));
+}
+
+// Logic to determine the DLL name (from argument or prompt)
+async function getDynamicDllName() {
+    if (optionalName) {
+        const name = optionalName.trim();
+        return name.toLowerCase().endsWith('.dll') ? name : `${name}.dll`;
+    }
+
+    console.log(`\n${colors.cyan}${colors.bold}🧠 PRO C++ DLL Configuration${colors.reset}`);
+    const answer = await askQuestion(`${colors.yellow}Enter the desired name for your DLL (e.g., CoreEngine): ${colors.reset}`);
+    
+    // Default fallback if user just presses Enter
+    const name = answer.trim() || 'ProLibrary'; 
+    return name.toLowerCase().endsWith('.dll') ? name : `${name}.dll`;
+}
 
 function checkEnv() {
     try {
@@ -175,10 +209,10 @@ int main() {
         fs.writeFileSync(mainCppPath, template);
     }
 
-    console.log(`${colors.green}✅ Ready! Use 'procpp watch' for EXE or 'procpp watch dll' for Libraries.${colors.reset}`);
+    console.log(`${colors.green}✅ Ready! Use 'procpp -h' for help.${colors.reset}`);
 }
 
-function buildAndRun(buildTarget) {
+function buildAndRun(buildTarget, customDllName = null) {
     if (!checkEnv()) return;
 
     const cppFiles = getSortedCppFiles();
@@ -197,8 +231,9 @@ function buildAndRun(buildTarget) {
 
     const isDll = buildTarget === 'dll';
     const ext = isDll ? '.dll' : '.exe';
-   // const outputFileName = `app_build_${Date.now()}${ext}`;
-    const outputFileName = isDll ? `MediaEngine.dll` : `app_build_${Date.now()}${ext}`;
+    
+    // Use the dynamic DLL name if provided, otherwise fallback to standard EXE naming
+    const outputFileName = isDll ? customDllName : `app_build_${Date.now()}${ext}`;
 
     console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? 'DLL Library' : 'Executable'} (x64)...${colors.reset}`);
     const startTime = performance.now();
@@ -238,7 +273,7 @@ function buildAndRun(buildTarget) {
         console.log(`${colors.green}${colors.bold}⚡ [Success] Compiled ${outputFileName} in ${buildTime}s${colors.reset}`);
 
         if (isDll) {
-            console.log(`${colors.magenta}📦 DLL is ready in .build/ for .NET 10 integration.${colors.reset}\n + ${colors.gray}${"-".repeat(40)}${colors.reset}`);
+            console.log(`${colors.magenta}📦 DLL [${outputFileName}] is ready in .build/ for .NET integration.${colors.reset}\n + ${colors.gray}${"-".repeat(40)}${colors.reset}`);
         } else {
             console.log(`${colors.yellow}🟢 RUNNING -> ${outputFileName}${colors.reset}\n + ${colors.gray}${"-".repeat(40)}${colors.reset}`);
             currentAppProcess = spawn(`.\\.build\\${outputFileName}`, [], { shell: true, stdio: 'inherit' });
@@ -252,12 +287,19 @@ function buildAndRun(buildTarget) {
     }
 }
 
-function watchProject(buildTarget) {
+async function watchProject(buildTarget) {
     if (!checkEnv()) return;
     console.clear();
-    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${buildTarget === 'dll' ? 'DLL Mode' : 'EXE Mode'})${colors.reset}`);
     
-    buildAndRun(buildTarget);
+    // Resolve the DLL name once before starting the watch loop
+    let dllName = null;
+    if (buildTarget === 'dll') {
+        dllName = await getDynamicDllName();
+    }
+
+    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${buildTarget === 'dll' ? `DLL Mode: ${dllName}` : 'EXE Mode'})${colors.reset}`);
+    
+    buildAndRun(buildTarget, dllName);
 
     fs.watch(process.cwd(), { recursive: true }, (eventType, filename) => {
         if (filename && (filename.endsWith('.cpp') || filename.endsWith('.ixx') || filename.endsWith('.h')) && !filename.includes('.build')) {
@@ -265,32 +307,78 @@ function watchProject(buildTarget) {
             watchTimeout = setTimeout(() => {
                 console.clear();
                 console.log(`${colors.gray}[${new Date().toLocaleTimeString()}] Change detected: ${filename}${colors.reset}`);
-                buildAndRun(buildTarget);
+                // Re-use the cached dllName on every hot-reload
+                buildAndRun(buildTarget, dllName);
             }, 300);
         }
     });
 }
 
+// --- HELP MENU ---
+// Easily add new commands here in the future
+function showHelp() {
+    console.log(`\n${colors.cyan}${colors.bold}🛠️  PRO C++ CLI Core v${packageJson.version}${colors.reset}`);
+    console.log(`${colors.gray}The ultimate C++ build tool tailored for .NET 10+ integration.${colors.reset}\n`);
+    
+    console.log(`${colors.yellow}Usage:${colors.reset}`);
+    console.log(`  procpp <command> [target] [DllName]\n`);
+    
+    console.log(`${colors.yellow}Commands:${colors.reset}`);
+    console.log(`  ${colors.green}init${colors.reset}      Initializes a new PRO C++ project (.vscode configs, main.cpp template)`);
+    console.log(`  ${colors.green}run${colors.reset}       Compiles the project once (EXE or DLL)`);
+    console.log(`  ${colors.green}watch${colors.reset}     Starts the watcher, auto-recompiling on file changes (.cpp, .ixx, .h)\n`);
+
+    console.log(`${colors.yellow}Targets & Arguments:${colors.reset}`);
+    console.log(`  ${colors.cyan}dll${colors.reset}       Compiles the project as a Dynamic Link Library (.dll) with static runtime (/MT)`);
+    console.log(`  ${colors.cyan}[DllName]${colors.reset} (Optional) Fast-track dynamic DLL naming without prompts\n`);
+
+    console.log(`${colors.yellow}Options:${colors.reset}`);
+    console.log(`  ${colors.magenta}-h, --help${colors.reset}    Show this help message`);
+    console.log(`  ${colors.magenta}-v, --version${colors.reset} Show CLI version\n`);
+
+    console.log(`${colors.yellow}Examples:${colors.reset}`);
+    console.log(`  ${colors.gray}procpp init${colors.reset}                  ${colors.gray}// Setup workspace${colors.reset}`);
+    console.log(`  ${colors.gray}procpp watch${colors.reset}                 ${colors.gray}// Watch and build EXE${colors.reset}`);
+    console.log(`  ${colors.gray}procpp watch dll${colors.reset}             ${colors.gray}// Watch and build DLL (prompts for name)${colors.reset}`);
+    console.log(`  ${colors.gray}procpp watch dll MediaEngine${colors.reset} ${colors.gray}// Fast-track watch and build MediaEngine.dll${colors.reset}\n`);
+}
+
 // --- CLI ROUTER ---
 
 const versionFlags = ['-v', '--version', 'version'];
+const helpFlags = ['-h', '--help', 'help'];
+
+// Handle Version
 if (versionFlags.includes(command)) {
     console.log(`${colors.bold}pro-cpp-cli-core v${packageJson.version}${colors.reset}`);
     process.exit(0);
 }
 
-switch (command) {
-    case 'init': 
-        initProject(); 
-        break;
-    case 'run': 
-        buildAndRun(target); 
-        break;
-    case 'watch': 
-        watchProject(target); 
-        break;
-    default: 
-        console.log(`${colors.bold}🛠️ PRO CPP CLI v${packageJson.version}${colors.reset}`);
-        console.log(`Usage: procpp <init|run|watch|version> [dll]`); 
-        break;
+// Handle Help or empty command
+if (helpFlags.includes(command) || !command) {
+    showHelp();
+    process.exit(0);
 }
+
+// Ensure the main execution context can handle async/await
+(async () => {
+    switch (command) {
+        case 'init': 
+            initProject(); 
+            break;
+        case 'run': 
+            let runDllName = null;
+            if (target === 'dll') {
+                runDllName = await getDynamicDllName();
+            }
+            buildAndRun(target, runDllName); 
+            break;
+        case 'watch': 
+            await watchProject(target); 
+            break;
+        default: 
+            console.log(`\n${colors.red}❌ Unknown command: ${command}${colors.reset}`);
+            showHelp();
+            break;
+    }
+})();
