@@ -75,25 +75,25 @@ How to set it up in 2 steps:
 ✨ Features (The PRO Way)
 
 💎 Smart C++20 Modules Handling
-Forget about manual build order. procpp automatically scans Your .ixx (interfaces) and .cpp files, detects export module and import statements, and performs Topological Sorting to compile everything in the correct order.
+Forget about manual build order. `procpp` automatically scans Your `.ixx` (interfaces) and `.cpp` files, detects `export module` and `import` statements, and performs Topological Sorting to compile everything in the correct order.
 
 ---
 
 📦 .NET 10+ Integration Ready
-Compiling DLLs for C# usually brings headaches like DllNotFoundException. We fixed it:
+Compiling DLLs for C# usually brings headaches like `DllNotFoundException`. We fixed it:
 
  • Static Runtime Linking (/MT): All dependencies are packed into the DLL. No need for VC++ Redistributable on the server.
 
  • x64 Architecture Enforcement: Automatic checks to ensure Your DLL matches Your .NET runtime architecture.
 
- • Clean Artifacts: Auto-cleanup of .obj, .exp, .lib, and .pdb files to keep Your workspace pristine.
+ • Clean Artifacts: Auto-cleanup of `.obj`, `.exp`, `.lib`, and `.pdb` files to keep Your workspace pristine.
 
 ⌨️ Dynamic DLL Naming
 No more hardcoded filenames. You have two ways to name Your library:
 
- 1. Interactive: Just run procpp watch dll and the CLI will ask You for a name.
+ 1. Interactive: Just run `procpp watch dll` and the CLI will ask You for a name.
 
- 2. Fast-Track: Run procpp watch dll MyEngine to skip prompts and build MyEngine.dll immediately.
+ 2. Fast-Track: Run `procpp watch dll MyEngine` to skip prompts and build `MyEngine.dll` immediately.
 
 ---
 
@@ -105,11 +105,11 @@ Our watcher uses unique process management to bypass Windows file-lock issues. I
 
 | Command | Target | Argument | Description |
 |---|---|---|---|
-| `init` | none | none | Setup workspace, `.vscode` configs, and C++ template. | 
+| `init` |  |  | Setup workspace, `.vscode` configs, and C++ template. | 
 | `run` | `exe` / `dll` | `[Name]` | Performs a single-pass compilation. |
 | `watch` | `exe` / `dll` | `[Name]` | Starts hot-reload mode. Auto-rebuilds on file changes. |
-| `-h` | `--help` | none | Show the beautiful help menu. |
-| `-v` | `--version` | none | Show current version. |
+| `-h` | `--help` |  | Show the beautiful help menu. |
+| `-v` | `--version` |  | Show current version. |
 
 Examples:
 
