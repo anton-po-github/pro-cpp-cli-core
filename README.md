@@ -105,11 +105,11 @@ Our watcher uses unique process management to bypass Windows file-lock issues. I
 
 | Command | Target | Argument | Description |
 |---|---|---|---|
-| `init` | - | - | Setup workspace, `.vscode` configs, and C++ template. | 
+| `init` | none | none | Setup workspace, `.vscode` configs, and C++ template. | 
 | `run` | `exe` / `dll` | `[Name]` | Performs a single-pass compilation. |
 | `watch` | `exe` / `dll` | `[Name]` | Starts hot-reload mode. Auto-rebuilds on file changes. |
-| `-h` | `--help` | - | Show the beautiful help menu. |
-| `-v` | `--version` | - | Show current version. |
+| `-h` | `--help` | none | Show the beautiful help menu. |
+| `-v` | `--version` | none | Show current version. |
 
 Examples:
 
