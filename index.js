@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * PRO C++ CLI Core (V1.2.0)
+ * PRO C++ CLI Core (V1.2.1)
+ * - Added robust argument parsing for Release mode (-r, -release, --release)
+ * - Added Release Mode for hardcore hardware optimization
+ * - Added SIMD Vectorization (/arch:AVX2) and Fast Math (/fp:fast) for AI/Math tasks
  * - Added comprehensive Help Menu (-h, --help) like dotnet CLI
  * - Added Dynamic DLL Naming with Readline prompt
- * - Added Fast-Track CLI argument support (e.g. procpp watch dll MyLib)
  * - Persistent name caching during watch mode
  * - Added DLL compilation target (.NET 10+ compatible)
  * - Enforced x64 architecture checks and linker flags
  * - Added static runtime linking (/MT) to prevent DllNotFoundException (0x8007007E)
- * - Added aggressive cleanup for intermediate files
  */
 
 const { execSync, spawn } = require('child_process');
@@ -19,8 +20,16 @@ const { performance } = require('perf_hooks');
 const readline = require('readline');
 const packageJson = require('./package.json');
 
-// Extracting optional 4th argument for fast-track naming
-const [,, command, target, optionalName] = process.argv;
+// --- ARGUMENT PARSING (ROBUST PRO-LEVEL) ---
+const releaseFlags = ['--release', '-release', '-r'];
+const isRelease = process.argv.some(arg => releaseFlags.includes(arg.toLowerCase()));
+
+// Clean up args to extract command and targets cleanly (removes any release flags)
+const cleanArgs = process.argv.slice(2).filter(a => !releaseFlags.includes(a.toLowerCase()));
+const command = cleanArgs[0];
+const target = cleanArgs[1];
+const optionalName = cleanArgs[2];
+
 let currentAppProcess = null;
 let watchTimeout = null;
 
@@ -39,7 +48,6 @@ const colors = {
 
 // --- UTILS ---
 
-// Helper function to prompt user in the console
 function askQuestion(query) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -52,7 +60,6 @@ function askQuestion(query) {
     }));
 }
 
-// Logic to determine the DLL name (from argument or prompt)
 async function getDynamicDllName() {
     if (optionalName) {
         const name = optionalName.trim();
@@ -62,7 +69,6 @@ async function getDynamicDllName() {
     console.log(`\n${colors.cyan}${colors.bold}🧠 PRO C++ DLL Configuration${colors.reset}`);
     const answer = await askQuestion(`${colors.yellow}Enter the desired name for your DLL (e.g., CoreEngine): ${colors.reset}`);
     
-    // Default fallback if user just presses Enter
     const name = answer.trim() || 'ProLibrary'; 
     return name.toLowerCase().endsWith('.dll') ? name : `${name}.dll`;
 }
@@ -71,7 +77,6 @@ function checkEnv() {
     try {
         const output = execSync('cl.exe 2>&1', { encoding: 'utf8', stdio: 'pipe' });
         
-        // Strict check for x64 architecture to avoid LNK1112 and .NET load errors
         if (!output.includes('x64')) {
             console.log(`\n${colors.yellow}${colors.bold}⚠️ WARNING: Compiler does not seem to be x64!${colors.reset}`);
             console.log(`${colors.gray}For .NET 10 compatibility, ensure You are using "x64 Native Tools Command Prompt for VS".${colors.reset}\n`);
@@ -191,12 +196,10 @@ function initProject() {
 
     const mainCppPath = path.join(process.cwd(), 'main.cpp');
     if (!fs.existsSync(mainCppPath)) {
-        // C++ Template includes an example for DLL export to help with .NET integration
         const template = 
 `#include <iostream>
 #include <windows.h>
 
-// Example of a function exported for .NET 10+ (P/Invoke)
 extern "C" __declspec(dllexport) int AddNumbers(int a, int b) {
     return a + b;
 }
@@ -232,39 +235,42 @@ function buildAndRun(buildTarget, customDllName = null) {
     const isDll = buildTarget === 'dll';
     const ext = isDll ? '.dll' : '.exe';
     
-    // Use the dynamic DLL name if provided, otherwise fallback to standard EXE naming
     const outputFileName = isDll ? customDllName : `app_build_${Date.now()}${ext}`;
-
-    console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? 'DLL Library' : 'Executable'} (x64)...${colors.reset}`);
+    
+    const modeText = isRelease ? `${colors.magenta}RELEASE (Hardware Optimized)${colors.cyan}` : `DEBUG`;
+    console.log(`\n${colors.cyan}🔨 Compiling ${isDll ? 'DLL Library' : 'Executable'} (x64) [${modeText}]...${colors.reset}`);
+    
     const startTime = performance.now();
 
-    // /MT statically links the runtime to prevent 0x8007007E DllNotFoundException on servers
-    // /LD compiles as DLL
-    // /link /MACHINE:X64 forces 64-bit linking
-    let compileCmd = `cl.exe /std:c++20 /nologo /EHsc /Zi ${cppFiles} /Fe"${outputFileName}"`;
+    // Base flags
+    let compileCmd = `cl.exe /std:c++20 /nologo /EHsc ${cppFiles} /Fe"${outputFileName}"`;
     
+    // Optimization Flags
+    if (isRelease) {
+        compileCmd += ` /O2 /fp:fast /arch:AVX2`;
+    } else {
+        compileCmd += ` /Zi`; 
+    }
+
+    // DLL specific flags
     if (isDll) {
-        compileCmd = `cl.exe /std:c++20 /nologo /EHsc /Zi /MT /LD ${cppFiles} /Fe"${outputFileName}" /link /MACHINE:X64`;
+        compileCmd += ` /MT /LD /link /MACHINE:X64`;
     }
 
     if (runSyncCommand(compileCmd)) {
         const buildTime = ((performance.now() - startTime) / 1000).toFixed(2);
         
-        // Handle artifacts
         const junkExtensions = ['.obj', '.ifc', '.pdb', '.ilk', '.exp', '.lib'];
         fs.readdirSync(process.cwd()).forEach(file => {
             const isOutput = file === outputFileName;
             const isJunk = junkExtensions.some(e => file.endsWith(e));
 
             if (isOutput) {
-                // Move the main artifact (.exe or .dll) to .build directory
                 try { fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file)); } catch(e) {}
             } else if (isJunk) {
-                if (isDll) {
-                    // Aggressive cleanup for DLL builds: wipe out all junk files to keep it clean
+                if (isDll || isRelease) {
                     try { fs.unlinkSync(path.join(process.cwd(), file)); } catch(e) {}
                 } else {
-                    // Move junk to .build for EXE (useful for debugging)
                     try { fs.renameSync(path.join(process.cwd(), file), path.join(BUILD_DIR, file)); } catch(e) {}
                 }
             }
@@ -291,13 +297,13 @@ async function watchProject(buildTarget) {
     if (!checkEnv()) return;
     console.clear();
     
-    // Resolve the DLL name once before starting the watch loop
     let dllName = null;
     if (buildTarget === 'dll') {
         dllName = await getDynamicDllName();
     }
 
-    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${buildTarget === 'dll' ? `DLL Mode: ${dllName}` : 'EXE Mode'})${colors.reset}`);
+    const modeText = isRelease ? '(RELEASE MODE)' : '';
+    console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${buildTarget === 'dll' ? `DLL Mode: ${dllName}` : 'EXE Mode'}) ${colors.magenta}${modeText}${colors.reset}`);
     
     buildAndRun(buildTarget, dllName);
 
@@ -307,7 +313,6 @@ async function watchProject(buildTarget) {
             watchTimeout = setTimeout(() => {
                 console.clear();
                 console.log(`${colors.gray}[${new Date().toLocaleTimeString()}] Change detected: ${filename}${colors.reset}`);
-                // Re-use the cached dllName on every hot-reload
                 buildAndRun(buildTarget, dllName);
             }, 300);
         }
@@ -315,32 +320,32 @@ async function watchProject(buildTarget) {
 }
 
 // --- HELP MENU ---
-// Easily add new commands here in the future
 function showHelp() {
     console.log(`\n${colors.cyan}${colors.bold}🛠️  PRO C++ CLI Core v${packageJson.version}${colors.reset}`);
     console.log(`${colors.gray}The ultimate C++ build tool tailored for .NET 10+ integration.${colors.reset}\n`);
     
     console.log(`${colors.yellow}Usage:${colors.reset}`);
-    console.log(`  procpp <command> [target] [DllName]\n`);
+    console.log(`  procpp <command> [target] [DllName] [flags]\n`);
     
     console.log(`${colors.yellow}Commands:${colors.reset}`);
-    console.log(`  ${colors.green}init${colors.reset}      Initializes a new PRO C++ project (.vscode configs, main.cpp template)`);
+    console.log(`  ${colors.green}init${colors.reset}      Initializes a new PRO C++ project`);
     console.log(`  ${colors.green}run${colors.reset}       Compiles the project once (EXE or DLL)`);
-    console.log(`  ${colors.green}watch${colors.reset}     Starts the watcher, auto-recompiling on file changes (.cpp, .ixx, .h)\n`);
+    console.log(`  ${colors.green}watch${colors.reset}     Starts the watcher, auto-recompiling on file changes\n`);
 
     console.log(`${colors.yellow}Targets & Arguments:${colors.reset}`);
-    console.log(`  ${colors.cyan}dll${colors.reset}       Compiles the project as a Dynamic Link Library (.dll) with static runtime (/MT)`);
-    console.log(`  ${colors.cyan}[DllName]${colors.reset} (Optional) Fast-track dynamic DLL naming without prompts\n`);
+    console.log(`  ${colors.cyan}dll${colors.reset}       Compiles the project as a Dynamic Link Library (.dll)`);
+    console.log(`  ${colors.cyan}[DllName]${colors.reset} (Optional) Fast-track dynamic DLL naming\n`);
 
-    console.log(`${colors.yellow}Options:${colors.reset}`);
+    console.log(`${colors.yellow}PRO Flags:${colors.reset}`);
+    console.log(`  ${colors.magenta}-r, --release${colors.reset} Compiles with /O2, /fp:fast, and /arch:AVX2 for MAX hardware speed!`);
     console.log(`  ${colors.magenta}-h, --help${colors.reset}    Show this help message`);
     console.log(`  ${colors.magenta}-v, --version${colors.reset} Show CLI version\n`);
 
     console.log(`${colors.yellow}Examples:${colors.reset}`);
-    console.log(`  ${colors.gray}procpp init${colors.reset}                  ${colors.gray}// Setup workspace${colors.reset}`);
-    console.log(`  ${colors.gray}procpp watch${colors.reset}                 ${colors.gray}// Watch and build EXE${colors.reset}`);
-    console.log(`  ${colors.gray}procpp watch dll${colors.reset}             ${colors.gray}// Watch and build DLL (prompts for name)${colors.reset}`);
-    console.log(`  ${colors.gray}procpp watch dll MediaEngine${colors.reset} ${colors.gray}// Fast-track watch and build MediaEngine.dll${colors.reset}\n`);
+    console.log(`  ${colors.gray}procpp watch${colors.reset}                 ${colors.gray}// Standard debug watch${colors.reset}`);
+    console.log(`  ${colors.gray}procpp watch dll MediaCore${colors.reset}   ${colors.gray}// Debug DLL watch${colors.reset}`);
+    console.log(`  ${colors.gray}procpp run --release${colors.reset}         ${colors.gray}// Build EXE with SIMD optimizations!${colors.reset}`);
+    console.log(`  ${colors.gray}procpp run dll --release${colors.reset}     ${colors.gray}// Build PRODUCTION-READY DLL!${colors.reset}\n`);
 }
 
 // --- CLI ROUTER ---
@@ -348,19 +353,16 @@ function showHelp() {
 const versionFlags = ['-v', '--version', 'version'];
 const helpFlags = ['-h', '--help', 'help'];
 
-// Handle Version
 if (versionFlags.includes(command)) {
     console.log(`${colors.bold}pro-cpp-cli-core v${packageJson.version}${colors.reset}`);
     process.exit(0);
 }
 
-// Handle Help or empty command
 if (helpFlags.includes(command) || !command) {
     showHelp();
     process.exit(0);
 }
 
-// Ensure the main execution context can handle async/await
 (async () => {
     switch (command) {
         case 'init': 
