@@ -64,11 +64,11 @@ Forget about manual build order. `procpp` automatically scans your `.ixx` (inter
 📦 .NET 10+ Integration Ready
 Compiling DLLs for C# usually brings headaches like `DllNotFoundException`. We fixed it:
 
- 1. Static Runtime Linking (/MT): All dependencies are packed into the DLL. No need for VC++ Redistributable on the server.
+ - Static Runtime Linking (/MT): All dependencies are packed into the DLL. No need for VC++ Redistributable on the server.
 
- 2. x64 Architecture Enforcement: Automatic checks to ensure your DLL matches your .NET runtime architecture. It is important to use the `x64 native tools command prompt for VS.`💡
+ - x64 Architecture Enforcement: Automatic checks to ensure your DLL matches your .NET runtime architecture. It is important to use the `x64 native tools command prompt for VS.`💡
 
- 3. Clean Artifacts: Auto-cleanup of `.obj`, `.exp`, `.lib`, and `.pdb` files to keep your workspace pristine.
+ - Clean Artifacts: Auto-cleanup of `.obj`, `.exp`, `.lib`, and `.pdb` files to keep your workspace pristine.
 
 ---
 
@@ -111,7 +111,7 @@ We've built a bulletproof PowerShell builder specifically for `C++20 Modules` th
 
 How to set it up in 2 steps:
 
- 2. Download our magic [build.ps1](https://github.com/anton-po-github/pro-cpp/blob/main/.vscode/build.ps1) and save it inside your `.vscode/ folder`.
+ 1. Download our magic [build.ps1](https://github.com/anton-po-github/pro-cpp/blob/main/.vscode/build.ps1) and save it inside your `.vscode/ folder`.
 
  2. Replace your `.vscode/tasks.json` with [this configuration](https://github.com/anton-po-github/pro-cpp/blob/main/.vscode/tasks.json).
 
