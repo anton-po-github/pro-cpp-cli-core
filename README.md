@@ -1,4 +1,4 @@
-# 🚀 PRO C++ CLI Core (V1.2.0)
+# 🚀 PRO C++ CLI Core (V1.3.1)
 
 The ultimate Developer Experience (DX) for C++ on Windows. Inspired by Angular and .NET CLI. 
 Stop fighting with compilers, start writing code.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * PRO C++ CLI Core (V1.3.0)
+ * PRO C++ CLI Core (V1.3.1)
  * - Added robust argument parsing for Release mode (-r, -release, --release)
  * - Added Release Mode for hardcore hardware optimization
  * - Added SIMD Vectorization (/arch:AVX2) and Fast Math (/fp:fast) for AI/Math tasks
@@ -9,7 +9,7 @@
  * - Added Dynamic Library Naming with Readline prompt
  * - Persistent name caching during watch mode
  * - Added DLL compilation target (.NET 10+ compatible)
- * - Added CO compilation target (custom extension library)
+ * - Added SO compilation target (Shared Object extension library)
  * - Enforced x64 architecture checks and linker flags
  * - Added static runtime linking (/MT) to prevent runtime dependency issues
  */
@@ -103,7 +103,7 @@ function cleanupOldBuilds() {
     if (fs.existsSync(BUILD_DIR)) {
         const files = fs.readdirSync(BUILD_DIR);
         files.forEach(file => {
-            if (['.obj', '.pdb', '.ilk', '.ifc', '.exp', '.lib', '.dll', '.co', '.exe'].some(ext => file.endsWith(ext)) || file.startsWith('app_build')) {
+            if (['.obj', '.pdb', '.ilk', '.ifc', '.exp', '.lib', '.dll', '.so', '.exe'].some(ext => file.endsWith(ext)) || file.startsWith('app_build')) {
                 try { fs.unlinkSync(path.join(BUILD_DIR, file)); } catch (err) {}
             }
         });
@@ -234,19 +234,19 @@ function buildAndRun(buildTarget, customLibName = null) {
     if (!fs.existsSync(BUILD_DIR)) fs.mkdirSync(BUILD_DIR);
 
     const isDll = buildTarget === 'dll';
-    const isCo = buildTarget === 'co';
-    const isLib = isDll || isCo;
+    const isSo = buildTarget === 'so';
+    const isLib = isDll || isSo;
     
     let ext = '.exe';
     if (isDll) ext = '.dll';
-    if (isCo) ext = '.co';
+    if (isSo) ext = '.so';
     
     const outputFileName = isLib ? customLibName : `app_build_${Date.now()}${ext}`;
     
     const modeText = isRelease ? `${colors.magenta}RELEASE (Hardware Optimized)${colors.cyan}` : `DEBUG`;
     let buildTargetName = 'Executable';
     if (isDll) buildTargetName = 'DLL Library';
-    if (isCo) buildTargetName = 'CO Library';
+    if (isSo) buildTargetName = 'SO Library';
     
     console.log(`\n${colors.cyan}🔨 Compiling ${buildTargetName} (x64) [${modeText}]...${colors.reset}`);
     
@@ -310,14 +310,14 @@ async function watchProject(buildTarget) {
     let libName = null;
     if (buildTarget === 'dll') {
         libName = await getDynamicLibName('dll');
-    } else if (buildTarget === 'co') {
-        libName = await getDynamicLibName('co');
+    } else if (buildTarget === 'so') {
+        libName = await getDynamicLibName('so');
     }
 
     const modeText = isRelease ? '(RELEASE MODE)' : '';
     let targetDisplay = 'EXE Mode';
     if (buildTarget === 'dll') targetDisplay = `DLL Mode: ${libName}`;
-    if (buildTarget === 'co') targetDisplay = `CO Mode: ${libName}`;
+    if (buildTarget === 'so') targetDisplay = `SO Mode: ${libName}`;
 
     console.log(`${colors.cyan}${colors.bold}👀 PRO C++ Watcher Started (${targetDisplay}) ${colors.magenta}${modeText}${colors.reset}`);
     
@@ -337,20 +337,20 @@ async function watchProject(buildTarget) {
 
 // --- HELP MENU ---
 function showHelp() {
-    console.log(`\n${colors.cyan}${colors.bold}🛠️  PRO C++ CLI Core v${packageJson.version || '1.3.0'}${colors.reset}`);
-    console.log(`${colors.gray}The ultimate C++ build tool tailored for .NET 10+ integration.${colors.reset}\n`);
+    console.log(`\n${colors.cyan}${colors.bold}🛠️  PRO C++ CLI Core v${packageJson.version || '1.3.1'}${colors.reset}`);
+    console.log(`${colors.gray}The ultimate C++ build tool tailored for modern integrations.${colors.reset}\n`);
     
     console.log(`${colors.yellow}Usage:${colors.reset}`);
     console.log(`  procpp <command> [target] [LibraryName] [flags]\n`);
     
     console.log(`${colors.yellow}Commands:${colors.reset}`);
     console.log(`  ${colors.green}init${colors.reset}      Initializes a new PRO C++ project`);
-    console.log(`  ${colors.green}run${colors.reset}       Compiles the project once (EXE, DLL, or CO)`);
+    console.log(`  ${colors.green}run${colors.reset}       Compiles the project once (EXE, DLL, or SO)`);
     console.log(`  ${colors.green}watch${colors.reset}     Starts the watcher, auto-recompiling on file changes\n`);
 
     console.log(`${colors.yellow}Targets & Arguments:${colors.reset}`);
     console.log(`  ${colors.cyan}dll${colors.reset}       Compiles the project as a Dynamic Link Library (.dll)`);
-    console.log(`  ${colors.cyan}co${colors.reset}        Compiles the project as a custom compiled object (.co)`);
+    console.log(`  ${colors.cyan}so${colors.reset}        Compiles the project as a Shared Object library (.so)`);
     console.log(`  ${colors.cyan}[LibName]${colors.reset} (Optional) Fast-track dynamic library naming\n`);
 
     console.log(`${colors.yellow}PRO Flags:${colors.reset}`);
@@ -361,7 +361,7 @@ function showHelp() {
     console.log(`${colors.yellow}Examples:${colors.reset}`);
     console.log(`  ${colors.gray}procpp watch${colors.reset}                 ${colors.gray}// Standard debug watch${colors.reset}`);
     console.log(`  ${colors.gray}procpp watch dll MediaCore${colors.reset}   ${colors.gray}// Debug DLL watch${colors.reset}\n`);
-    console.log(`  ${colors.gray}procpp run co --release${colors.reset}     ${colors.gray}// Build PRODUCTION-READY CO!${colors.reset}`);
+    console.log(`  ${colors.gray}procpp run so --release${colors.reset}      ${colors.gray}// Build PRODUCTION-READY SO!${colors.reset}`);
     console.log(`  ${colors.gray}procpp run dll --release${colors.reset}     ${colors.gray}// Build PRODUCTION-READY DLL!${colors.reset}\n`);
 }
 
@@ -371,7 +371,7 @@ const versionFlags = ['-v', '--version', 'version'];
 const helpFlags = ['-h', '--help', 'help'];
 
 if (versionFlags.includes(command)) {
-    console.log(`${colors.bold}pro-cpp-cli-core v${packageJson.version || '1.3.0'}${colors.reset}`);
+    console.log(`${colors.bold}pro-cpp-cli-core v${packageJson.version || '1.3.1'}${colors.reset}`);
     process.exit(0);
 }
 
@@ -389,8 +389,8 @@ if (helpFlags.includes(command) || !command) {
             let runLibName = null;
             if (target === 'dll') {
                 runLibName = await getDynamicLibName('dll');
-            } else if (target === 'co') {
-                runLibName = await getDynamicLibName('co');
+            } else if (target === 'so') {
+                runLibName = await getDynamicLibName('so');
             }
             buildAndRun(target, runLibName); 
             break;
